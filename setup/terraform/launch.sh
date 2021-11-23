@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -o errexit
 set -o nounset
 BASE_DIR=$(cd $(dirname $0); pwd -L)
@@ -36,6 +36,7 @@ check_python_modules
 # Check if enddate is close
 WARNING_THRESHOLD_DAYS=2
 DATE_CHECK=$(remaining_days "$TF_VAR_enddate")
+echo "Date check ($DATE_CHECK)..."
 if [ "$DATE_CHECK" -le "0" ]; then
   echo 'ERROR: The expiration date for your environment is either set for today or already in the past.'
   echo '       Please update "TF_VAR_endddate" in .env.'"$NAMESPACE"' and try again.'
@@ -48,6 +49,8 @@ elif [ "$DATE_CHECK" -le "$WARNING_THRESHOLD_DAYS" ]; then
     echo 'Please update "TF_VAR_endddate" in .env.'"$NAMESPACE"' and try again.'
     abort
   fi
+else
+  echo -n 'INFO: End Date OK.'
 fi
 
 # Ensure registration code is chosen

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Works on MacOS only
 set -o errexit
 set -o nounset

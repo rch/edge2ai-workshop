@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 source $BASE_DIR/common-basics.sh
 
@@ -254,6 +254,7 @@ function try_in_docker() {
 function check_python_modules() {
   python -c '
 missing_modules = []
+print("Checking requirements...")
 try:
   import yaml
 except:
@@ -574,6 +575,7 @@ function presign_urls() {
 }
 
 function validate_env() {
+  echo "Validating environment..."
   local template_file=$BASE_DIR/.env.template
   local compare_file=$(get_env_file_path $NAMESPACE)
   if [[ $compare_file != "" && ! -f $compare_file ]]; then
