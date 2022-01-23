@@ -111,11 +111,13 @@ function check_version() {
 function check_stack_version() {
   if [[ ! -f $BASE_DIR/NO_VERSION_CHECK ]]; then
     # Get last check timestamp
-    last_stack_check=$(head -1 $LAST_STACK_CHECK_FILE 2>/dev/null | grep -o "^[0-9]\{14\}" | head -1)
-    latest_stack=$(curl "https://raw.githubusercontent.com/$GITHUB_REPO/$GITHUB_BRANCH/$STACK_BUILD_FILE" 2>/dev/null | head -1 | grep -o "^[0-9]\{14\}" | head -1)
-    echo "$latest_stack" > $LAST_STACK_CHECK_FILE
-    if [[ $latest_stack != "" ]]; then
-      if [[ $last_stack_check == "" || $last_stack_check < $latest_stack ]]; then
+    local last_stack_check=$(head -1 $LAST_STACK_CHECK_FILE 2>/dev/null | grep -o "^[0-9]\{14\}" | head -1 || true)
+    local latest_stack_in_repo=$(curl "https://raw.githubusercontent.com/$GITHUB_REPO/$GITHUB_BRANCH/$STACK_BUILD_FILE" 2>/dev/null | head -1 | grep -o "^[0-9]\{14\}" | head -1 || true)
+    local latest_stack_in_use=$(grep -h STACK_VERSION $BASE_DIR/resources/stack*.sh 2>/dev/null | egrep -o "\b[0-9]{14}\b" | sort -u | tail -1 || true)
+    echo "$latest_stack_in_repo" > $LAST_STACK_CHECK_FILE
+    if [[ $latest_stack_in_repo != "" ]]; then
+      if [[ ($latest_stack_in_use == "" || $latest_stack_in_use < $latest_stack_in_repo) && \
+            ($last_stack_check == "" || $last_stack_check < $latest_stack_in_repo) ]]; then
         echo "$C_YELLOW"
         echo "There are new STACK definitions available at the URL below (VPN required):"
         echo ""
@@ -184,7 +186,7 @@ function maybe_launch_docker() {
     fi
     if [[ "${NO_DOCKER_PULL:-}" == "" && $docker_img == $DEFAULT_DOCKER_IMAGE ]]; then
       if [[ $(is_docker_image_stale) == "yes" ]]; then
-        docker pull $docker_img || true
+        docker pull --platform linux/amd64 $docker_img || true
       fi
     fi
 
@@ -194,6 +196,7 @@ function maybe_launch_docker() {
     fi
     local cmd=./$(basename $0)
     exec docker run -ti --rm \
+      --platform linux/amd64 \
       --detach-keys="ctrl-@" \
       --entrypoint="" \
       -v $BASE_DIR/../..:/edge2ai-workshop \
@@ -203,8 +206,7 @@ function maybe_launch_docker() {
       $docker_img \
       $cmd $*
   fi
-  local is_inside_docker=$(egrep "/(lxc|docker)/" /proc/1/cgroup > /dev/null 2>&1 && echo yes || echo no)
-  if [[ "$is_inside_docker" == "no" ]]; then
+  if [[ "${INSIDE_DOCKER_CONTAINER:-0}" == "0" ]]; then
     if [[ ${NO_DOCKER_MSG:-} == "" ]]; then
       echo -e "${C_DIM}Running locally (no docker)${C_NORMAL}"
       export NO_DOCKER_MSG=1
@@ -238,6 +240,7 @@ function try_in_docker() {
   if [[ "${NO_DOCKER:-}" == "" && "$(is_docker_running)" == "yes" ]]; then
     local docker_img=${EDGE2AI_DOCKER_IMAGE:-$DEFAULT_DOCKER_IMAGE}
     exec docker run --rm \
+      --platform linux/amd64 \
       --detach-keys="ctrl-@" \
       --entrypoint="" \
       -v $BASE_DIR/../..:/edge2ai-workshop \
@@ -245,7 +248,7 @@ function try_in_docker() {
       -e DEBUG=${DEBUG:-} \
       -e HOSTS_ADD=$(basename $PUBLIC_IPS_FILE) \
       $docker_img \
-      /bin/bash -c "cd /edge2ai-workshop/setup/terraform; export BASE_DIR=\$PWD; source common.sh; load_env $namespace; ${cmd[@]}"
+      /bin/bash -c "cd /edge2ai-workshop/setup/terraform; export BASE_DIR=\$PWD; export NO_DOCKER_MSG=1; source common.sh; load_env $namespace; ${cmd[@]}"
   else
     (load_env $namespace; "${cmd[@]}")
   fi
@@ -335,6 +338,7 @@ function load_env() {
     echo "${C_NORMAL}"
     exit 1
   fi
+  export AWS_DEFAULT_REGION=${TF_VAR_aws_region}
   if [[ ${TF_VAR_aws_profile:-} ]]; then
     export AWS_PROFILE=${TF_VAR_aws_profile}
   else
@@ -912,7 +916,12 @@ function is_stoppable() {
 function enddate() {
   ensure_tf_json_file
   if [ -s $TF_JSON_FILE ]; then
-    cat $TF_JSON_FILE | jq -r '.values.root_module.resources[0].values.tags.enddate' | sed 's/null//'
+    jq -r '.values.root_module.resources[] | select(.type == "aws_instance").values.tags.enddate' $TF_JSON_FILE | \
+      grep -v null | \
+      sed -E 's/^(....)(....)$/\2\1/' | \
+      sort -u | \
+      head -1 | \
+      sed -E 's/^(....)(....)$/\2\1/'
   fi
 }
 
