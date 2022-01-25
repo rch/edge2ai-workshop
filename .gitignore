@@ -3,3 +3,4 @@
 __pycache__/
 .vscode/
 edge2ai.code-workspace
+setup/scripts
