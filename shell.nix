@@ -1,18 +1,18 @@
-{ pkgs ? import <nixpkgs> {} }:
 let
-  basePython = pkgs.python3;
-  localPython = basePython.withPackages (p: with p; [
-    boto3
-    jinja2
-    pyyaml
-  ]);
+  sources = import ./nix/sources.nix;
+  pkgs = import sources.nixpkgs {};
 in
+with pkgs;
 pkgs.mkShell {
   buildInputs = [
-    localPython
-    pkgs.ansible
-    pkgs.jq
-    pkgs.terraform
+    ansible
+    awscli2
+    jq
+    python39Full
+    python39Packages.boto3
+    python39Packages.jinja2
+    python39Packages.pyyaml
+    terraform
   ];
 }
 
